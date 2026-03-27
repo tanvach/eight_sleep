@@ -250,10 +250,23 @@ class EightSleep:
             None,
         )
 
+    # BUGFIX(pre-existing, split-candidate): per-user isolation so one user's
+    # transient API failure (504/500) does not cascade and abort the entire
+    # coordinator update for ALL users. Without this, a flaky endpoint for
+    # user B silently freezes listeners for user A — breaking any listener
+    # that depends on regular coordinator ticks (e.g. skip-alarm, dismiss
+    # button state, presence). Latent since PR #109 multi-pod support.
     async def update_user_data(self) -> None:
         """Update data for users."""
         for user in self.users.values():
-            await user.update_user()
+            try:
+                await user.update_user()
+            except Exception as err:
+                _LOGGER.warning(
+                    "Failed to update user %s: %s — continuing with other users",
+                    user.user_id,
+                    err,
+                )
 
     async def update_base_data(self) -> None:
         """Update data for the bed base.
